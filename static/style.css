@@ -5,10 +5,159 @@
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    font-family: 'Georgia', 'Times New Roman', serif;
     line-height: 1.6;
-    color: #333;
-    background-color: #f5f5f5;
+    color: #1a2636;
+    background: linear-gradient(180deg, #e7eef7 0%, #f7fafd 100%);
+    margin: 0;
+    padding: 0;
+}
+
+.cia-header {
+    background: #003366;
+    color: #fff;
+    padding: 1.5rem 0 0.5rem 0;
+    text-align: center;
+    position: relative;
+    border-bottom: 5px solid #f5d76e;
+}
+.cia-seal {
+    width: 80px;
+    height: 80px;
+    display: block;
+    margin: 0 auto 0.5rem auto;
+    filter: drop-shadow(0 2px 4px #00224444);
+}
+.cia-title {
+    font-size: 2.2rem;
+    font-weight: bold;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.5rem;
+    text-shadow: 1px 2px 4px #00224433;
+}
+.cia-nav {
+    margin: 0.5rem 0 0 0;
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+}
+.cia-nav a {
+    color: #f5d76e;
+    text-decoration: none;
+    font-weight: bold;
+    font-size: 1.1rem;
+    transition: color 0.2s;
+}
+.cia-nav a:hover {
+    color: #fff;
+    text-decoration: underline;
+}
+
+.cia-main {
+    max-width: 680px;
+    margin: 2rem auto;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 4px 24px #00336611;
+    padding: 2rem 2.5rem 1.5rem 2.5rem;
+}
+.cia-hero {
+    text-align: center;
+    padding-bottom: 2rem;
+    border-bottom: 2px solid #e7eef7;
+}
+.cia-hero-content h1 {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+    color: #003366;
+    font-weight: bold;
+}
+.cia-tagline {
+    font-size: 1.15rem;
+    color: #666;
+    margin-bottom: 1.5rem;
+}
+.cia-search-form {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+    margin: 0 auto;
+    max-width: 420px;
+}
+.cia-search-label {
+    display: none;
+}
+.cia-search-form input[type="text"] {
+    flex: 1 1 auto;
+    padding: 0.85rem 1rem;
+    font-size: 1.07rem;
+    border: 2px solid #003366;
+    border-radius: 5px 0 0 5px;
+    outline: none;
+    background: #f7fafc;
+    color: #1a2636;
+    transition: border 0.2s;
+}
+.cia-search-form input[type="text"]:focus {
+    border-color: #f5d76e;
+}
+.cia-search-form button {
+    padding: 0.85rem 1.3rem;
+    background: #003366;
+    color: #fff;
+    font-weight: bold;
+    border: 2px solid #003366;
+    border-radius: 0 5px 5px 0;
+    font-size: 1.07rem;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+}
+.cia-search-form button:hover {
+    background: #f5d76e;
+    color: #003366;
+    border-color: #f5d76e;
+}
+.cia-news {
+    margin-top: 2rem;
+    margin-bottom: 1.5rem;
+}
+.cia-news h2 {
+    color: #003366;
+    font-size: 1.3rem;
+    margin-bottom: 0.5rem;
+    font-weight: bold;
+}
+.cia-news ul {
+    list-style: disc inside;
+    color: #1a2636;
+    margin-left: 1rem;
+    padding-left: 0;
+}
+.cia-news li {
+    margin-bottom: 0.5rem;
+    font-size: 1.07rem;
+}
+.cia-director-message {
+    margin-top: 2rem;
+    padding: 1.2rem;
+    background: #e7eef7;
+    border-radius: 7px;
+    box-shadow: 0 1px 4px #00336611;
+}
+.cia-director-message h2 {
+    color: #003366;
+    font-size: 1.15rem;
+    margin-bottom: 0.5rem;
+    font-weight: bold;
+}
+.cia-footer {
+    background: #003366;
+    color: #fff;
+    text-align: center;
+    padding: 1.1rem 0 0.7rem 0;
+    font-size: 0.97rem;
+    margin-top: 2.5rem;
+    border-top: 5px solid #f5d76e;
 }
 
 .container {

@@ -1,34 +1,26 @@
 package main
 
 import (
-	"database/sql"
+	"bufio"
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sync"
-	"time"
 
 	"github.com/gorilla/websocket"
-	_ "github.com/mattn/go-sqlite3"
 )
 
 var (
-	// Upgrade HTTP connection to WebSocket
 	upgrader = websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
-		// Allow all origins for simplicity, in production you'd restrict this
-		CheckOrigin: func(r *http.Request) bool { return true },
+		CheckOrigin:     func(r *http.Request) bool { return true },
 	}
-	
-	// topicSubscribers maps topic keys to lists of connected clients
 	topicSubscribers = make(map[string][]*Client)
-	
-	// Mutex to protect concurrent access to the subscribers map
 	subscribersMutex sync.RWMutex
-	
-	// Database connection
-	db *sql.DB
+	dataDir          = "data" // Directory to store message files
 )
 
 // Client represents a connected WebSocket client
@@ -39,147 +31,84 @@ type Client struct {
 	username string
 }
 
-// Message represents a chat message that will be stored in the database
-type Message struct {
-	Topic     string    `json:"topic"`
-	Content   string    `json:"content"` // Encrypted content
-	Timestamp time.Time `json:"timestamp"`
-}
-
 func main() {
-	// Initialize database
-	var err error
-	db, err = sql.Open("sqlite3", "./chat.db")
-	if err != nil {
-		log.Fatal("Failed to open database: ", err)
+	// Ensure data directory exists
+	if err := ensureDataDir(); err != nil {
+		log.Fatalf("Failed to create data directory: %v", err)
 	}
-	defer db.Close()
-	
-	// Create tables if they don't exist
-	if err = createTables(); err != nil {
-		log.Fatal("Failed to create tables: ", err)
-	}
-	
-	// Serve static files from the "static" directory
-	fs := http.FileServer(http.Dir("static"))
-	http.Handle("/", fs)
-	
-	// WebSocket endpoint for chat
+
+	http.Handle("/", http.FileServer(http.Dir("static")))
 	http.HandleFunc("/ws", handleWebSocket)
-	
-	// Start the server
+
 	log.Println("Starting server on :8080")
-	err = http.ListenAndServe(":8080", nil)
-	if err != nil {
+	if err := http.ListenAndServe(":8080", nil); err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
 }
 
-// createTables creates the necessary database tables if they don't exist
-func createTables() error {
-	_, err := db.Exec(`
-		CREATE TABLE IF NOT EXISTS messages (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			topic TEXT NOT NULL,
-			content TEXT NOT NULL,
-			timestamp DATETIME NOT NULL
-		);
-		CREATE INDEX IF NOT EXISTS idx_messages_topic ON messages(topic);
-	`)
-	return err
+// ensureDataDir creates the data directory if it doesn't exist.
+func ensureDataDir() error {
+	return os.MkdirAll(dataDir, 0750)
 }
 
-// saveMessage saves an encrypted message to the database
-func saveMessage(topic string, content string) error {
-	_, err := db.Exec(
-		"INSERT INTO messages (topic, content, timestamp) VALUES (?, ?, ?)",
-		topic,
-		content,
-		time.Now(),
-	)
+// saveMessageToFile saves a single message to the topic's file.
+// Each message is appended as a new line.
+func saveMessageToFile(topic string, rawMessage string) error {
+	filePath := filepath.Join(dataDir, topic+".txt")
+	file, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0640)
 	if err != nil {
-		log.Printf("Error saving message: %v", err)
 		return err
 	}
-	log.Printf("Message saved to database for topic: %s", topic)
+	defer file.Close()
+
+	if _, err := file.WriteString(rawMessage + "\n"); err != nil {
+		return err
+	}
+	log.Printf("Message saved to file for topic: %s", topic)
 	return nil
 }
 
-// getMessageHistory retrieves message history for a topic
-func getMessageHistory(topic string) ([]Message, error) {
-	rows, err := db.Query(
-		"SELECT topic, content, timestamp FROM messages WHERE topic = ? ORDER BY timestamp ASC",
-		topic,
-	)
+// readMessagesForTopic reads all messages for a topic from its file.
+// Returns a slice of strings, where each string is one message.
+func readMessagesForTopic(topic string) ([]string, error) {
+	filePath := filepath.Join(dataDir, topic+".txt")
+	file, err := os.Open(filePath) // Use os.Open for read-only
 	if err != nil {
+		if os.IsNotExist(err) {
+			return []string{}, nil // No history if file doesn't exist
+		}
 		return nil, err
 	}
-	defer rows.Close()
-	
-	var messages []Message
-	for rows.Next() {
-		var msg Message
-		var timestamp string
-		if err := rows.Scan(&msg.Topic, &msg.Content, &timestamp); err != nil {
-			return nil, err
-		}
-		// Parse the timestamp - try multiple formats
-		formats := []string{
-			"2006-01-02T15:04:05.999999999-07:00", // ISO-8601 with timezone
-			"2006-01-02 15:04:05.999999999-07:00", // Space separator with timezone
-			"2006-01-02T15:04:05-07:00",           // ISO-8601 with timezone, no fractional seconds
-			"2006-01-02 15:04:05-07:00",           // Space separator with timezone, no fractional seconds
-			"2006-01-02T15:04:05Z",                // UTC time
-			"2006-01-02 15:04:05",                // No timezone
-			time.RFC3339,                          // Standard RFC3339
-		}
-		
-		var parseErr error
-		for _, format := range formats {
-			msg.Timestamp, parseErr = time.Parse(format, timestamp)
-			if parseErr == nil {
-				break
-			}
-		}
-		
-		if parseErr != nil {
-			log.Printf("Failed to parse timestamp '%s' with any known format", timestamp)
-			return nil, parseErr
-		}
-		messages = append(messages, msg)
+	defer file.Close()
+
+	var messages []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		messages = append(messages, scanner.Text())
 	}
-	
-	return messages, nil
+	return messages, scanner.Err()
 }
 
-// handleWebSocket processes WebSocket connections
 func handleWebSocket(w http.ResponseWriter, r *http.Request) {
-	// Upgrade the HTTP connection to a WebSocket connection
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println("Upgrade error:", err)
 		return
 	}
 	defer conn.Close()
-	
-	// New client without a topic yet
+
 	client := &Client{conn: conn, topic: ""}
-	
-	// Handle messages from this client
+
 	for {
-		// Read message
 		messageType, message, err := conn.ReadMessage()
 		if err != nil {
 			log.Println("Read error:", err)
 			removeClient(client)
 			break
 		}
-		
-		// Process the message
+
 		if client.topic == "" {
-			// First message is the topic key
 			client.topic = string(message)
-			// Next message must be client info
 			_, clientInfoMsg, err := conn.ReadMessage()
 			if err != nil {
 				log.Println("Failed to read client info message:", err)
@@ -199,61 +128,41 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			client.username = info.Username
 			addClient(client)
 			log.Printf("Client subscribed to topic: %s as %s (%s)", client.topic, client.username, client.clientId)
+
 			// Send message history to the new client
-			sendMessageHistory(client)
-			// Send userlist to the new client
-			sendUserList(client)
-		} else {
-			// Save message to database
-			if err := saveMessage(client.topic, string(message)); err != nil {
-				log.Printf("Error saving message to database: %v", err)
+			historyMessages, err := readMessagesForTopic(client.topic)
+			if err != nil {
+				log.Printf("Error getting message history for topic %s: %v", client.topic, err)
+			} else if len(historyMessages) > 0 {
+				// Wrap raw message strings into objects for client compatibility
+				wrappedMessages := make([]map[string]string, len(historyMessages))
+				for i, msgStr := range historyMessages {
+					wrappedMessages[i] = map[string]string{"content": msgStr}
+				}
+				historyPacket := map[string]interface{}{
+					"type":     "history",
+					"messages": wrappedMessages,
+				}
+				jsonPacket, err := json.Marshal(historyPacket)
+				if err != nil {
+					log.Printf("Error marshalling history packet: %v", err)
+				} else {
+					if err := client.conn.WriteMessage(websocket.TextMessage, jsonPacket); err != nil {
+						log.Printf("Error sending history to client %s: %v", client.clientId, err)
+					}
+				}
 			}
-			
-			// Broadcast message to all subscribers
+			sendUserList(client) // Send user list after history
+		} else {
+			if err := saveMessageToFile(client.topic, string(message)); err != nil {
+				log.Printf("Error saving message to file: %v", err)
+			}
 			broadcastToTopic(client.topic, messageType, message, client)
 		}
 	}
 }
 
-// sendMessageHistory sends the message history to a newly connected client
-func sendMessageHistory(client *Client) {
-	log.Printf("Retrieving message history for topic: %s", client.topic)
-	history, err := getMessageHistory(client.topic)
-	if err != nil {
-		log.Printf("Error retrieving message history: %v", err)
-		return
-	}
-	
-	log.Printf("Found %d messages in history for topic: %s", len(history), client.topic)
-	
-	if len(history) > 0 {
-		// Create a history packet with all messages
-		historyData, err := json.Marshal(struct {
-			Type     string    `json:"type"`
-			Messages []Message `json:"messages"`
-		}{
-			Type:     "history",
-			Messages: history,
-		})
-		
-		if err != nil {
-			log.Printf("Error marshaling history data: %v", err)
-			return
-		}
-		
-		// Send the history packet
-		log.Printf("Sending history packet with %d messages", len(history))
-		if err := client.conn.WriteMessage(websocket.TextMessage, historyData); err != nil {
-			log.Printf("Error sending history: %v", err)
-		} else {
-			log.Printf("Successfully sent history packet to client")
-		}
-	} else {
-		log.Printf("No message history to send for topic: %s", client.topic)
-	}
-}
-
-// addClient adds a client to a topic's subscriber list
+// addClient adds a client to the subscribers list for their topic
 func addClient(client *Client) {
 	subscribersMutex.Lock()
 	defer subscribersMutex.Unlock()
@@ -267,7 +176,7 @@ func sendUserList(client *Client) {
 	clients := topicSubscribers[client.topic]
 	users := make([]map[string]string, 0, len(clients))
 	for _, c := range clients {
-		if c.clientId != "" && c.username != "" {
+		if c.clientId != "" && c.username != "" { // Ensure client has ID and username
 			users = append(users, map[string]string{
 				"clientId": c.clientId,
 				"username": c.username,
@@ -278,49 +187,75 @@ func sendUserList(client *Client) {
 		"type":  "userlist",
 		"users": users,
 	}
-	data, err := json.Marshal(packet)
+	jsonPacket, err := json.Marshal(packet)
 	if err != nil {
-		log.Printf("Failed to marshal userlist: %v", err)
+		log.Printf("Error marshalling userlist packet: %v", err)
 		return
 	}
-	if err := client.conn.WriteMessage(websocket.TextMessage, data); err != nil {
-		log.Printf("Failed to send userlist: %v", err)
+	if err := client.conn.WriteMessage(websocket.TextMessage, jsonPacket); err != nil {
+		log.Printf("Error sending userlist to client %s: %v", client.clientId, err)
 	}
 }
 
-// removeClient removes a client from its topic
-func removeClient(client *Client) {
-	if client.topic == "" {
-		return
-	}
-	
+// removeClient removes a client from all subscription lists
+func removeClient(clientToRemove *Client) {
 	subscribersMutex.Lock()
 	defer subscribersMutex.Unlock()
 	
-	// Find and remove the client
-	clients := topicSubscribers[client.topic]
-	for i, c := range clients {
-		if c == client {
-			// Remove without preserving order
-			clients[i] = clients[len(clients)-1]
-			topicSubscribers[client.topic] = clients[:len(clients)-1]
+	if clientToRemove.topic == "" {
+		return // Client was never fully subscribed
+	}
+	
+	// Remove the client from the specific topic list
+	subscribers := topicSubscribers[clientToRemove.topic]
+	for i, client := range subscribers {
+		if client == clientToRemove {
+			topicSubscribers[clientToRemove.topic] = append(subscribers[:i], subscribers[i+1:]...)
+			log.Printf("Client %s (%s) removed from topic %s", clientToRemove.username, clientToRemove.clientId, clientToRemove.topic)
 			break
 		}
 	}
 	
-	// If no more clients in the topic, remove the topic
-	if len(topicSubscribers[client.topic]) == 0 {
-		delete(topicSubscribers, client.topic)
+	// If topic has no subscribers left, delete the topic key
+	if len(topicSubscribers[clientToRemove.topic]) == 0 {
+		delete(topicSubscribers, clientToRemove.topic)
+		log.Printf("Topic %s removed as it has no more subscribers", clientToRemove.topic)
+	}
+	
+	// Broadcast updated user list to remaining clients in the topic
+	remainingClients := topicSubscribers[clientToRemove.topic]
+	users := make([]map[string]string, 0, len(remainingClients))
+	for _, c := range remainingClients {
+		if c.clientId != "" && c.username != "" { // Ensure client has ID and username
+			users = append(users, map[string]string{
+				"clientId": c.clientId,
+				"username": c.username,
+			})
+		}
+	}
+	packet := map[string]interface{}{
+		"type":  "userlist",
+		"users": users,
+	}
+	jsonPacket, err := json.Marshal(packet)
+	if err != nil {
+		log.Printf("Error marshalling userlist packet after client removal: %v", err)
+		return
+	}
+	
+	for _, client := range remainingClients {
+		if err := client.conn.WriteMessage(websocket.TextMessage, jsonPacket); err != nil {
+			log.Printf("Error sending updated userlist to client %s: %v", client.clientId, err)
+		}
 	}
 }
 
-// broadcastToTopic sends a message to all clients in a topic except the sender
+// broadcastToTopic sends a message to all clients subscribed to a specific topic, except the sender
 func broadcastToTopic(topic string, messageType int, message []byte, sender *Client) {
 	subscribersMutex.RLock()
 	defer subscribersMutex.RUnlock()
 	
 	for _, client := range topicSubscribers[topic] {
-		// Skip the sender
 		if client == sender {
 			continue
 		}

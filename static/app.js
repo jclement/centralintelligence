@@ -54,20 +54,34 @@ function generateUsername(id) {
 const username = generateUsername(clientId);
 
 // DOM elements
-const loginSection = document.getElementById('login-section');
+const ciaMain = document.querySelector('.cia-main');
 const chatSection = document.getElementById('chat-section');
 const loginForm = document.getElementById('login-form');
 const messageForm = document.getElementById('message-form');
 const messagesContainer = document.getElementById('messages');
+
+// Intercept the parody search form submission
+if (loginForm) {
+    loginForm.addEventListener('submit', function(event) {
+        event.preventDefault();
+        const secretPhraseInput = document.getElementById('secret-phrase');
+        if (!secretPhraseInput) return;
+        const secretPhrase = secretPhraseInput.value.trim();
+        if (!secretPhrase) return;
+        // Hide parody homepage, show chat UI first
+        if (ciaMain) ciaMain.style.display = 'none';
+        if (chatSection) chatSection.style.display = 'block';
+        // Then set up encryption, topic, and connect
+        handleLogin(secretPhrase);
+    });
+}
+
 const messageInput = document.getElementById('message-input');
 const secretPhraseInput = document.getElementById('secret-phrase');
 const topicDisplay = document.getElementById('topic-display');
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
-    // Handle login form submission
-    loginForm.addEventListener('submit', handleLogin);
-    
     // Handle message form submission
     messageForm.addEventListener('submit', handleSendMessage);
     
@@ -81,14 +95,8 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // Handle login and key generation
-function handleLogin(e) {
-    e.preventDefault();
-    
-    const secretPhrase = secretPhraseInput.value.trim();
-    if (!secretPhrase) {
-        alert('Please enter a secret phrase');
-        return;
-    }
+function handleLogin(secretPhrase) { // e is removed, secretPhrase is now the direct argument
+    // secretPhrase is already trimmed and validated by the caller
     
     // Generate encryption key using PBKDF2 with the passphrase itself as salt
     // This still provides strong key derivation with good iteration count
@@ -108,9 +116,7 @@ function handleLogin(e) {
     // Connect to WebSocket server
     connectWebSocket();
     
-    // Hide login section, show chat section
-    loginSection.style.display = 'none';
-    chatSection.style.display = 'block';
+    // DOM manipulation (hiding login, showing chat) is now handled by the calling event listener
     
     // Focus the message input
     messageInput.focus();

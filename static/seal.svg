@@ -1,0 +1,11 @@
+<svg width="120" height="120" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="60" cy="60" r="58" fill="#003366" stroke="#fff" stroke-width="4"/>
+  <circle cx="60" cy="60" r="48" fill="#fff"/>
+  <text x="60" y="40" font-size="13" fill="#003366" font-family="serif" text-anchor="middle" font-weight="bold">CENTRAL</text>
+  <text x="60" y="56" font-size="13" fill="#003366" font-family="serif" text-anchor="middle" font-weight="bold">INTELLIGENCE</text>
+  <text x="60" y="72" font-size="13" fill="#003366" font-family="serif" text-anchor="middle" font-weight="bold">PARODY</text>
+  <text x="60" y="88" font-size="13" fill="#003366" font-family="serif" text-anchor="middle" font-weight="bold">AGENCY</text>
+  <circle cx="60" cy="60" r="20" fill="#f5d76e" stroke="#003366" stroke-width="2"/>
+  <polygon points="60,45 65,65 60,60 55,65" fill="#003366"/>
+  <circle cx="60" cy="60" r="3" fill="#003366"/>
+</svg>

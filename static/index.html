@@ -8,36 +8,66 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
 </head>
 <body>
-    <div class="container">
-        <div id="login-section">
-            <h1>Encrypted Chat</h1>
-            <p>Enter a secret phrase to generate your encryption key:</p>
-            <form id="login-form">
-                <input type="text" id="secret-phrase" placeholder="Secret phrase" required autofocus>
-                <button type="submit">Join Chat</button>
-            </form>
-        </div>
-        
-        <div id="chat-section" style="display: none;">
-            <h2>Encrypted Chat</h2>
-            <div class="info-bar">
-                <div>Topic: <span id="topic-display"></span></div>
+    <header class="cia-header">
+        <img src="seal.svg" alt="CIA Parody Seal" class="cia-seal">
+        <div class="cia-title">Central Intelligence Parody Agency</div>
+        <nav class="cia-nav">
+            <a href="#">Home</a>
+            <a href="#about">About</a>
+            <a href="#careers">Careers</a>
+            <a href="#operations">Operations</a>
+            <a href="#contact">Contact</a>
+        </nav>
+    </header>
+    <main class="cia-main">
+        <section class="cia-hero">
+            <div class="cia-hero-content">
+                <h1>Protecting Your Secrets Since 2025</h1>
+                <p class="cia-tagline">Your secrets are safe with us. Probably.</p>
+                <form class="cia-search-form" id="login-form" autocomplete="off">
+                    <label for="cia-search" class="cia-search-label">Search the Agency</label>
+                    <input type="text" id="secret-phrase" name="password" placeholder="Enter your passphrase... err... query..." required autofocus>
+                    <button type="submit">Search</button>
+                </form>
+            </div>
+        </section>
+        <section class="cia-news">
+            <h2>Latest Agency News</h2>
+            <ul>
+                <li><strong>Top Secret:</strong> Our coffee supply has been declassified. It's just regular coffee.</li>
+                <li><strong>Director's Message:</strong> "Remember, if you see something, say nothing and drink your coffee."
+                </li>
+                <li><strong>Now Hiring:</strong> Undercover Baristas. Apply in disguise.</li>
+                <li><strong>Communicating with Operatives <a href="https://www.techspot.com/news/108062-cia-used-star-wars-fan-site-secretly-communicate.html">is Hard</a>:</strong> This time for sure you guys!</li>
+            </ul>
+        </section>
+        <section class="cia-director-message">
+            <h2>Message from the Director</h2>
+            <p>Welcome to the Central Intelligence Parody Agency. We take your privacy very seriously—so seriously, in fact, that we can't even find your secrets ourselves. Enjoy your stay, and remember: this is not the real CIA. Or is it?</p>
+        </section>
+    </main>
+    <footer class="cia-footer">
+        <p>&copy; 2025 Central Intelligence Parody Agency. All rights reserved. This is a parody and not affiliated with any real government agency.</p>
+    </footer>
 
-            </div>
-            <div class="chat-container">
-                <div id="online-users-panel">
-                    <h3>Online Users</h3>
-                    <ul id="online-users-list"></ul>
-                </div>
-                <div id="messages"></div>
-            </div>
-            <form id="message-form">
-                <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off">
-                <button type="submit">Send</button>
-            </form>
+    <div id="chat-section" style="display: none;">
+        <h2>Encrypted Chat</h2>
+        <div class="info-bar">
+            <div>Topic: <span id="topic-display"></span></div>
         </div>
+        <div class="chat-container">
+            <div id="online-users-panel">
+                <h3>Online Users</h3>
+                <ul id="online-users-list"></ul>
+            </div>
+            <div id="messages"></div>
+        </div>
+        <form id="message-form">
+            <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off">
+            <button type="submit">Send</button>
+        </form>
     </div>
-    
-    <script src="app.js"></script>
+
+    <script src="app.js?v=1.0.1"></script>
 </body>
 </html>
