@@ -22,7 +22,7 @@ RUN CGO_ENABLED=0 go build -o /app/main .
 # Start a new stage from scratch for a smaller image
 FROM alpine:latest
 
-WORKDIR /root/
+WORKDIR /app/
 
 # Copy the Pre-built binary file from the previous stage
 COPY --from=builder /app/main .

@@ -198,6 +198,59 @@ button:hover {
     background-color: #2980b9;
 }
 
+/* Efficiency Page Specific Styles */
+.efficiency-page .cia-hero-content h1 {
+    font-size: 2.2rem; /* Slightly larger for emphasis */
+    color: #d9534f; /* A 'warning' or 'official notice' red */
+}
+
+.efficiency-page .cia-tagline {
+    font-size: 1.2rem;
+    color: #555;
+    margin-bottom: 2rem;
+}
+
+.efficiency-notice {
+    background-color: #f9f2f4; /* Light pink/beige background */
+    border: 1px solid #d9534f;
+    border-left: 5px solid #d9534f; /* Prominent left border */
+    padding: 1.5rem;
+    margin: 2rem auto;
+    max-width: 600px;
+    border-radius: 5px;
+    text-align: left;
+}
+
+.efficiency-notice h2 {
+    color: #d9534f;
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+    text-align: center;
+}
+
+.efficiency-notice p {
+    margin-bottom: 1rem;
+    line-height: 1.7;
+    color: #333;
+}
+
+.efficiency-notice .cia-button {
+    display: block;
+    width: fit-content;
+    margin: 1.5rem auto 0 auto;
+    background-color: #003366;
+    color: #fff;
+    padding: 0.75rem 1.5rem;
+    text-decoration: none;
+    border-radius: 5px;
+    font-weight: bold;
+    transition: background-color 0.2s;
+}
+
+.efficiency-notice .cia-button:hover {
+    background-color: #00509e;
+}
+
 #login-form, #message-form {
     display: flex;
     gap: 0.5rem;

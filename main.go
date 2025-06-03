@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/gorilla/websocket"
@@ -84,7 +85,10 @@ func readMessagesForTopic(topic string) ([]string, error) {
 	var messages []string
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		messages = append(messages, scanner.Text())
+		line := scanner.Text()
+		if strings.TrimSpace(line) != "" { // Only append non-empty lines
+			messages = append(messages, line)
+		}
 	}
 	return messages, scanner.Err()
 }
@@ -154,10 +158,35 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			}
 			sendUserList(client) // Send user list after history
 		} else {
-			if err := saveMessageToFile(client.topic, string(message)); err != nil {
-				log.Printf("Error saving message to file: %v", err)
+			msgStr := string(message)
+			parts := strings.SplitN(msgStr, ":", 2)
+
+			if len(parts) == 2 && parts[0] != "" && parts[1] != "" {
+				// Message is in a hmac:payload format.
+				// parts[0] is hmac, parts[1] is the payload (e.g., ciphertext or presence:ciphertext)
+
+				isPresenceMessage := strings.HasPrefix(parts[1], "presence:")
+
+				if !isPresenceMessage {
+					// This is a regular chat message (hmac:ciphertext)
+					if err := saveMessageToFile(client.topic, msgStr); err != nil {
+						log.Printf("Error saving regular message to file: %v", err)
+					}
+					// log.Printf("Saved regular message for topic %s: %.50s...", client.topic, msgStr) // Log first 50 chars
+				} else {
+					// This is a presence message (hmac:presence:ciphertext). Do not save it.
+					// log.Printf("Received presence message for topic %s, not saving: %.50s...", client.topic, msgStr) // Log first 50 chars
+				}
+
+				// Broadcast all validly structured messages (both regular chat and presence)
+				// because the client handles both for different purposes.
+				broadcastToTopic(client.topic, messageType, message, client)
+
+			} else {
+				// Message not in 'hmac:payload' format
+				log.Printf("Received message not in expected hmac:payload format from client %s on topic %s: %s", client.clientId, client.topic, msgStr)
+				// Do not save, do not broadcast this malformed message
 			}
-			broadcastToTopic(client.topic, messageType, message, client)
 		}
 	}
 }
