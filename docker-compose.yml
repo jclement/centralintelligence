@@ -1,16 +1,18 @@
 services:
-  app:
+
+  app: # Example for running image from GHCR
     build:
       context: .
       dockerfile: Dockerfile
+    #image: ghcr.io/jclement/centralintelligence:latest # Replace with your actual image name if different
     restart: unless-stopped
     volumes:
-      - ./data:/app/data
+      - ./data:/app/data # Ensure this path is correct for your deployment environment
 
   cloudflared:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
-    command: tunnel --no-autoupdate --url http://app:8080 run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
     environment:
       - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
     depends_on:
