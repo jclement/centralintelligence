@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Encrypted Chat</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div id="login-section">
+            <h1>Encrypted Chat</h1>
+            <p>Enter a secret phrase to generate your encryption key:</p>
+            <form id="login-form">
+                <input type="text" id="secret-phrase" placeholder="Secret phrase" required autofocus>
+                <button type="submit">Join Chat</button>
+            </form>
+        </div>
+        
+        <div id="chat-section" style="display: none;">
+            <h2>Encrypted Chat</h2>
+            <div class="info-bar">
+                <div>Topic: <span id="topic-display"></span></div>
+
+            </div>
+            <div class="chat-container">
+                <div id="online-users-panel">
+                    <h3>Online Users</h3>
+                    <ul id="online-users-list"></ul>
+                </div>
+                <div id="messages"></div>
+            </div>
+            <form id="message-form">
+                <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off">
+                <button type="submit">Send</button>
+            </form>
+        </div>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>
