@@ -347,246 +347,177 @@ function handleSocketMessage(event) {
     }
 }
 
-// Handle history messages received when joining a chat
 function handleHistoryMessages(messages) {
     console.log('handleHistoryMessages called with', messages?.length || 0, 'messages');
     if (!messages || messages.length === 0) {
         console.log('No messages in history');
+        previousMessageHash = null; // Ensure null if no history
+        addSystemMessage('No previous messages in this briefing.');
         return;
     }
     
-    console.log('Processing message history:', messages);
-    // Add a system message indicating history is being loaded
-    addSystemMessage(`Loading ${messages.length} previous messages...`);
+    addSystemMessage(`Processing ${messages.length} previous messages...`);
     
-    // Sort messages by timestamp to ensure proper chain order
     const sortedMessages = [...messages].sort((a, b) => {
-        return new Date(a.timestamp) - new Date(b.timestamp);
+        // Assuming 'a' and 'b' are the raw encrypted strings from server history
+        // We need to decrypt them to get timestamp for sorting, which is inefficient here.
+        // For now, we'll assume server sends them in a somewhat reasonable order or client handles minor out-of-order issues.
+        // A better approach would be for server to send structured data with timestamps, or client to decrypt all then sort.
+        // Given the current structure, we'll process as received and rely on later chain validation.
+        return 0; // Placeholder: Actual sorting by encrypted timestamp is complex.
     });
     
-    // Reset chain variables to handle history as a fresh chain
     const tempChain = {};
-    let earliestHash = null;
-    let latestHash = null;
-    let failedDecryption = 0;
-    
-    // First pass: Decrypt and verify all messages
     const processedMessages = [];
+    let failedDecryption = 0;
+    const uniqueMessageBlockHashes = new Set(); // To prevent duplicate messageBlock processing
     
-    sortedMessages.forEach(message => {
+    sortedMessages.forEach((messageObject, index) => {
+        console.log(`[HISTORY DEBUG] --------------- Processing message ${index + 1} ---------------`);
+        console.log('[HISTORY DEBUG] typeof messageObject:', typeof messageObject, 'messageObject:', JSON.parse(JSON.stringify(messageObject || {})));
+        // Log content safely, handling if it's undefined or not an object that can be stringified directly for the second part
+        let contentLog = messageObject && messageObject.content !== undefined ? messageObject.content : null;
+        try {
+            contentLog = JSON.parse(JSON.stringify(contentLog)); // Attempt to deep copy if it's an object/array
+        } catch (e) { /* If it's a primitive or can't be stringified/parsed, use as is or null */ }
+        console.log('[HISTORY DEBUG] typeof messageObject.content:', typeof (messageObject ? messageObject.content : undefined), 'messageObject.content (logged safely):', contentLog);
+
+        const encryptedMessageString = messageObject.content;
+        console.log('[HISTORY DEBUG] Raw encrypted string from .content:', String(encryptedMessageString).substring(0, 70) + '...');
         try {
             let decryptedText;
             
-            // Check if this is an authenticated message (contains HMAC)
-            if (message.content.includes(':')) {
-                // Split the HMAC and ciphertext
-                const [receivedHmac, ciphertext] = message.content.split(':', 2);
-                
-                // Verify the HMAC
-                const computedHmac = CryptoJS.HmacSHA256(ciphertext, encryptionKey).toString();
-                
-                // If HMACs don't match, message has been tampered with
-                if (receivedHmac !== computedHmac) {
-                    console.error('History message authentication failed: HMAC verification failed');
-                    failedDecryption++;
-                    return; // Skip this message
-                }
-                
-                // HMAC is valid, now decrypt the message
-                const decrypted = CryptoJS.AES.decrypt(ciphertext, encryptionKey);
-                decryptedText = decrypted.toString(CryptoJS.enc.Utf8);
-            } else {
-                // Legacy message without authentication
-                const decrypted = CryptoJS.AES.decrypt(message.content, encryptionKey);
-                decryptedText = decrypted.toString(CryptoJS.enc.Utf8);
+            if (!encryptedMessageString || typeof encryptedMessageString !== 'string' || !encryptedMessageString.includes(':')) {
+                console.warn('Skipping history message: Invalid format (null or missing HMAC separator). Message:', String(encryptedMessageString).substring(0,50));
+                failedDecryption++;
+                return;
             }
+
+            const [receivedHmac, ciphertext] = encryptedMessageString.split(':', 2);
+            if (!ciphertext) {
+                console.warn('Skipping history message: Invalid format (missing ciphertext). Message from .content:', encryptedMessageString.substring(0,50));
+                failedDecryption++;
+                return;
+            }
+            
+            const computedHmac = CryptoJS.HmacSHA256(ciphertext, encryptionKey).toString();
+            if (receivedHmac !== computedHmac) {
+                console.error('History message authentication failed: HMAC verification failed. Message:', encryptedMessageString.substring(0,50));
+                failedDecryption++;
+                return;
+            }
+            
+            const decrypted = CryptoJS.AES.decrypt(ciphertext, encryptionKey);
+            decryptedText = decrypted.toString(CryptoJS.enc.Utf8);
+            console.log('[HISTORY DEBUG] Raw decryptedText (first 100 chars):', String(decryptedText).substring(0,100));
             
             if (!decryptedText) {
-                console.warn('Could not decrypt history message');
+                console.warn('Could not decrypt history message. Ciphertext:', ciphertext.substring(0,50));
                 failedDecryption++;
+                return;
+            }
+            
+            let messageBlock;
+            try {
+                messageBlock = JSON.parse(decryptedText);
+            } catch (parseError) {
+                console.error('[HISTORY DEBUG] JSON.parse FAILED for decryptedText. Error:', parseError);
+                console.error('[HISTORY DEBUG] Failed decryptedText was:', decryptedText);
+                failedDecryption++; // Count this as a failure
                 return; // Skip this message
             }
+            console.log('[HISTORY DEBUG] Successfully parsed messageBlock:', JSON.parse(JSON.stringify(messageBlock))); // Deep copy for logging
             
-            try {
-                // Try to parse as a blockchain message
-                const messageBlock = JSON.parse(decryptedText);
+            if (messageBlock.content && messageBlock.timestamp && 
+                messageBlock.sender && messageBlock.previousHash !== undefined) {
                 
-                // Check if it has the blockchain structure
-                if (messageBlock.content && messageBlock.timestamp && 
-                    messageBlock.sender && messageBlock.previousHash !== undefined) {
-                    
-                    // Compute the hash of this message
-                    const messageString = JSON.stringify(messageBlock);
-                    const currentHash = CryptoJS.SHA256(messageString).toString();
-                    
-                    // Store in our temporary chain
-                    tempChain[currentHash] = messageBlock;
-                    
-                    // Track the latest hash (newest message)
-                    if (latestHash === null || messageBlock.timestamp > tempChain[latestHash].timestamp) {
-                        latestHash = currentHash;
-                    }
-                    
-                    // Track the earliest hash (oldest message)
-                    if (earliestHash === null || messageBlock.timestamp < tempChain[earliestHash].timestamp) {
-                        earliestHash = currentHash;
-                    }
-                    
-                    // Format the timestamp
-                    const timestamp = new Date(messageBlock.timestamp);
-                    const timeString = timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                    const dateString = timestamp.toLocaleDateString();
-                    
-                    processedMessages.push({
-                        hash: currentHash,
-                        content: messageBlock.content,
-                        formattedTime: `${dateString} ${timeString}`,
-                        timestamp: messageBlock.timestamp,
-                        previousHash: messageBlock.previousHash,
-                        username: messageBlock.username || 'Anonymous'
-                    });
-                    
-                    return; // Skip to next message
+                const messageString = JSON.stringify(messageBlock);
+                console.log('[HISTORY DEBUG] Stringified messageBlock for hashing:', messageString);
+                const currentBlockContentHash = CryptoJS.SHA256(messageString).toString();
+                console.log('[HISTORY DEBUG] Calculated currentBlockContentHash:', currentBlockContentHash);
+                console.log('[HISTORY DEBUG] uniqueMessageBlockHashes before check:', Array.from(uniqueMessageBlockHashes));
+
+                // *** Check for duplicates based on messageBlock content hash ***
+                if (uniqueMessageBlockHashes.has(currentBlockContentHash)) {
+                    console.log('[HISTORY DEBUG] DUPLICATE FOUND in uniqueMessageBlockHashes. Hash:', currentBlockContentHash);
+                    console.log('Duplicate history messageBlock content detected, skipping. Hash:', currentBlockContentHash);
+                    return; // Skip this duplicate messageBlock
                 }
-            } catch (parseError) {
-                // Not a blockchain message, continue with legacy format
-            }
-            
-            // Legacy format (not blockchain) - just display with timestamp
-            const timestamp = new Date(message.timestamp);
-            const timeString = timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            const dateString = timestamp.toLocaleDateString();
-            
-            // Add to processed messages
-            processedMessages.push({
-                legacy: true,
-                content: decryptedText,
-                formattedTime: `${dateString} ${timeString}`,
-                timestamp: message.timestamp
-            });
-        } catch (error) {
-            console.log('Failed to decrypt history message:', error);
-            failedDecryption++;
-            // Silently ignore messages that fail to decrypt
-        }
-    });
-    
-    // Second pass: Verify chain integrity and display messages
-    let verifiedCount = 0;
-    let brokenChains = 0;
-    
-    // Display all messages in order
-    processedMessages.forEach(msg => {
-        if (msg.legacy) {
-            // Display legacy message
-            addMessage(msg.content, false, msg.formattedTime);
-        } else {
-            // Verify chain integrity if possible
-            const prevHash = msg.previousHash;
-            if (prevHash !== null && !tempChain[prevHash] && Object.keys(tempChain).length > 1) {
-                console.warn('History message references unknown previous hash:', prevHash);
-                brokenChains++;
+                uniqueMessageBlockHashes.add(currentBlockContentHash);
+                // *** End of duplicate check ***
+
+                tempChain[currentBlockContentHash] = messageBlock; // Store by its own content hash
+                
+                const timestamp = new Date(messageBlock.timestamp);
+                const timeString = timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const dateString = timestamp.toLocaleDateString();
+                
+                processedMessages.push({
+                    hash: currentBlockContentHash, // This is the hash of the messageBlock itself
+                    content: messageBlock.content,
+                    formattedTime: `${dateString} ${timeString}`,
+                    timestamp: messageBlock.timestamp,
+                    previousHash: messageBlock.previousHash,
+                    username: messageBlock.username || 'Anonymous'
+                });
             } else {
-                verifiedCount++;
+                // This is not a structured messageBlock, might be a legacy simple string or malformed.
+                // For simplicity, we'll log and skip if it doesn't fit the expected structure.
+                console.warn('Skipping history message: Not a valid messageBlock structure after decryption.', decryptedText.substring(0,100));
+                failedDecryption++;
             }
-            
-            // Display the message with username
-            addMessage(msg.content, false, msg.formattedTime, msg.username);
+        } catch (error) {
+            console.error('Error processing individual history message object:', messageObject, 'Error:', error);
+            failedDecryption++;
         }
     });
     
-    // Update our main chain with the history
-    Object.assign(messageChain, tempChain);
-    
-    // Set the previousMessageHash to the latest message's hash
-    if (latestHash) {
-        previousMessageHash = latestHash;
+    // Sort processedMessages by timestamp before chain validation and display
+    processedMessages.sort((a, b) => a.timestamp - b.timestamp);
+
+    let validMessagesCount = 0;
+    let latestValidMessageHashForGlobalPrev = null;
+    let expectedPrevHashInChain = null; 
+
+    // If there's at least one message, and the first one has a previousHash (could be null for the actual start of a chain)
+    if (processedMessages.length > 0 && processedMessages[0].previousHash !== undefined) {
+        expectedPrevHashInChain = processedMessages[0].previousHash; 
+        // For the very first message in history, its stated previousHash is the start of our expectation.
+        // If it's null, that's fine. If it's something else, the next message should point to this first message's hash.
     }
     
-    // Add a system message with chain verification status
-    if (verifiedCount > 0) {
-        if (brokenChains > 0) {
-            addSystemMessage(`End of message history. Verified ${verifiedCount} messages, found ${brokenChains} chain discontinuities.`);
+    processedMessages.forEach(msgData => {
+        // Validate chain: current message's previousHash should match the expected one.
+        // For the first message, its own previousHash is the baseline (expectedPrevHashInChain).
+        // For subsequent, expectedPrevHashInChain would be the hash of the *previous successfully added message*.
+
+        if (msgData.previousHash === expectedPrevHashInChain || validMessagesCount === 0) {
+            addMessage(msgData.content, false, msgData.formattedTime, msgData.username);
+            validMessagesCount++;
+            latestValidMessageHashForGlobalPrev = msgData.hash; // This message's own hash becomes the new expectation
+            expectedPrevHashInChain = msgData.hash; 
         } else {
-            addSystemMessage(`End of message history. Verified ${verifiedCount} messages with intact blockchain.`);
+            console.warn(`Blockchain history validation failed: Hash mismatch for message content "${msgData.content.substring(0,20)}...". Expected prev ${expectedPrevHashInChain}, got ${msgData.previousHash}. This message hash: ${msgData.hash}`);
+            addMessage(`⚠️ Chain broken. Message: "${msgData.content.substring(0,30)}..."`, false, msgData.formattedTime, msgData.username + ' (chain inconsistent)');
+            // Still add the message but mark inconsistency. Reset expectation for next message.
+            validMessagesCount++;
+            latestValidMessageHashForGlobalPrev = msgData.hash;
+            expectedPrevHashInChain = msgData.hash; 
         }
+    });
+    
+    if (latestValidMessageHashForGlobalPrev) {
+        previousMessageHash = latestValidMessageHashForGlobalPrev;
+        console.log('Set global previousMessageHash from history to:', previousMessageHash);
     } else {
-        addSystemMessage('End of message history.');
+        previousMessageHash = null; // No valid messages processed from history or no history
+        console.log('No valid history messages to set previousMessageHash, set to null.');
     }
-    
-    // Scroll to the bottom of the chat
-    scrollToBottom();
-}
 
-// Handle WebSocket connection close
-function handleSocketClose() {
-    addSystemMessage('Disconnected from chat. Refresh the page to reconnect.');
-}
-
-// Handle WebSocket errors
-function handleSocketError(error) {
-    console.error('WebSocket error:', error);
-    addSystemMessage('Error connecting to chat server.');
-}
-
-// Send an encrypted message
-function handleSendMessage(e) {
-    e.preventDefault();
-    
-    const messageText = messageInput.value.trim();
-    if (!messageText || !socket || socket.readyState !== WebSocket.OPEN) {
-        return;
+    if (failedDecryption > 0) {
+        addSystemMessage(`⚠️ ${failedDecryption} historical messages had errors.`);
     }
-    
-    try {
-        // Create a message block with blockchain-like structure
-        const messageBlock = {
-            content: messageText,
-            timestamp: Date.now(),
-            sender: clientId,
-            username: username, // Include the funny username
-            previousHash: previousMessageHash,
-            nonce: Math.floor(Math.random() * 1000000) // Add randomness
-        };
-        
-        // Convert the message block to a string for hashing
-        const messageString = JSON.stringify(messageBlock);
-        
-        // Create a hash of this message for the next message in the chain
-        const currentHash = CryptoJS.SHA256(messageString).toString();
-        
-        // Update the previous hash for the next message
-        previousMessageHash = currentHash;
-        
-        // Store this message in our chain
-        messageChain[currentHash] = messageBlock;
-        
-        // Implement authenticated encryption
-        // 1. Encrypt the message with AES
-        const encrypted = CryptoJS.AES.encrypt(messageString, encryptionKey);
-        const ciphertext = encrypted.toString();
-        
-        // 2. Create an HMAC for authentication (integrity check)
-        const hmac = CryptoJS.HmacSHA256(ciphertext, encryptionKey).toString();
-        
-        // 3. Combine the HMAC and ciphertext
-        // Format: hmac:ciphertext
-        const authenticatedMessage = hmac + ':' + ciphertext;
-        
-        // Send the authenticated encrypted message
-        socket.send(authenticatedMessage);
-        
-        // Display the message in our own chat
-        addMessage(messageText, true);
-        
-        // Clear the input field
-        messageInput.value = '';
-        
-        console.log('Sent message with hash:', currentHash);
-    } catch (error) {
-        console.error('Failed to encrypt and send message:', error);
-        addSystemMessage('Failed to send message. Error encrypting content.');
-    }
+    addSystemMessage(`${validMessagesCount} historical messages loaded.`);
 }
 
 // Add a message to the chat
@@ -686,3 +617,65 @@ function removeOnlineUser(id) {
         updateOnlineUsersList();
     }
 }
+
+// Send an encrypted message
+function handleSendMessage(e) {
+    e.preventDefault();
+    
+    const messageText = messageInput.value.trim();
+    if (!messageText || !socket || socket.readyState !== WebSocket.OPEN) {
+        console.log('Message not sent: empty, or socket not open/ready.');
+        if (!socket) console.log('Socket is null');
+        else console.log('Socket readyState:', socket.readyState);
+        return;
+    }
+    
+    try {
+        // Create a message block with blockchain-like structure
+        const messageBlock = {
+            content: messageText,
+            timestamp: Date.now(),
+            sender: clientId, // clientId is globally defined
+            username: username, // username is globally defined
+            previousHash: previousMessageHash, // previousMessageHash is globally defined
+            nonce: Math.floor(Math.random() * 1000000) // Add randomness
+        };
+        
+        // Convert the message block to a string for hashing
+        const messageString = JSON.stringify(messageBlock);
+        
+        // Create a hash of this message for the next message in the chain
+        const currentHash = CryptoJS.SHA256(messageString).toString();
+        
+        // Implement authenticated encryption
+        // 1. Encrypt the message string (JSON of messageBlock) with AES
+        const encrypted = CryptoJS.AES.encrypt(messageString, encryptionKey); // encryptionKey is globally defined
+        const ciphertext = encrypted.toString();
+        
+        // 2. Create an HMAC for authentication (integrity check)
+        const computedHmac = CryptoJS.HmacSHA256(ciphertext, encryptionKey).toString();
+        
+        // 3. Combine the HMAC and ciphertext
+        // Format: hmac:ciphertext
+        const authenticatedMessage = computedHmac + ':' + ciphertext;
+        
+        // Send the authenticated encrypted message
+        socket.send(authenticatedMessage);
+        
+        // Display the message in our own chat
+        // The addMessage function will use the global username for outgoing messages
+        addMessage(messageText, true, new Date(messageBlock.timestamp).toLocaleTimeString());
+        
+        // Update the previous hash for the next message *after* successful send & local display
+        previousMessageHash = currentHash;
+        
+        // Clear the input field
+        messageInput.value = '';
+        
+        console.log('Sent message with hash:', currentHash);
+    } catch (error) {
+        console.error('Failed to encrypt and send message:', error);
+        addSystemMessage('Failed to send message. Error encrypting content.');
+    }
+}
+
