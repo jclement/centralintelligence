@@ -51,11 +51,16 @@
         <p>&copy; 2025 Central Intelligence Parody Agency. All rights reserved. This is a parody and not affiliated with any real government agency.</p>
     </footer>
 
+    <!-- Audio elements for notifications -->
+    <audio id="message-sound" preload="auto">
+        <source src="sounds/message.mp3" type="audio/mp3">
+    </audio>
+    <audio id="join-sound" preload="auto">
+        <source src="sounds/join.mp3" type="audio/mp3">
+    </audio>
+    
     <div id="chat-section" style="display: none;">
         <h2>Encrypted Chat</h2>
-        <div class="info-bar">
-            <div>Topic: <span id="topic-display"></span></div>
-        </div>
         <div class="chat-container">
             <div id="online-users-panel">
                 <h3>Online Users</h3>
@@ -69,6 +74,6 @@
         </form>
     </div>
 
-    <script src="app.js?v=1.0.1"></script>
+    <script src="app.js"></script>
 </body>
 </html>

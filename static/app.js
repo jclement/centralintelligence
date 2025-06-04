@@ -4,6 +4,10 @@ let encryptionKey;
 let topicKey;
 let isConnected = false;
 
+// Sound notification elements
+let messageSound;
+let joinSound;
+
 // Blockchain-related variables
 let previousMessageHash = null; // Hash of the last message in our chain
 let messageChain = {}; // Keep track of message chain for verification
@@ -78,10 +82,107 @@ if (loginForm) {
 
 const messageInput = document.getElementById('message-input');
 const secretPhraseInput = document.getElementById('secret-phrase');
-const topicDisplay = document.getElementById('topic-display');
+
+// Sound notification control - many browsers require user interaction before playing audio
+let soundsUnlocked = false;
+
+// Function to unlock sounds after user interaction
+function unlockAudio() {
+    if (!soundsUnlocked) {
+        console.log('Attempting to unlock audio...');
+        // Create and play a silent audio context
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const silentBuffer = audioContext.createBuffer(1, 1, 22050);
+        const source = audioContext.createBufferSource();
+        source.buffer = silentBuffer;
+        source.connect(audioContext.destination);
+        source.start(0);
+
+        // Try to play and reset both sounds
+        if (messageSound) {
+            messageSound.volume = 0.5;
+            messageSound.play().then(() => {
+                messageSound.pause();
+                messageSound.currentTime = 0;
+                console.log('Message sound unlocked!');
+                soundsUnlocked = true;
+            }).catch(e => console.log('Still cannot play message sound:', e));
+        }
+        
+        if (joinSound) {
+            joinSound.volume = 0.5;
+            joinSound.play().then(() => {
+                joinSound.pause();
+                joinSound.currentTime = 0;
+                console.log('Join sound unlocked!');
+                soundsUnlocked = true;
+            }).catch(e => console.log('Still cannot play join sound:', e));
+        }
+    }
+}
+
+// Play the message notification sound
+function playMessageSound() {
+    // Only try to play sound after user has interacted with the chat
+    if (!messageSound || !chatSection || chatSection.style.display === 'none') {
+        return; // Don't play sounds if elements aren't ready or chat isn't visible
+    }
+    
+    // Try to unlock audio if needed
+    if (!soundsUnlocked) {
+        unlockAudio();
+    }
+    
+    messageSound.currentTime = 0;
+    messageSound.volume = 0.5;
+    messageSound.play().catch(e => {
+        // Most likely a user interaction is required - that's okay
+        console.log('Could not play message sound:', e);
+    });
+}
+
+// Play the join notification sound
+function playJoinSound() {
+    // Only try to play sound after user has interacted with the chat
+    if (!joinSound || !chatSection || chatSection.style.display === 'none') {
+        return; // Don't play sounds if elements aren't ready or chat isn't visible
+    }
+    
+    // Try to unlock audio if needed
+    if (!soundsUnlocked) {
+        unlockAudio();
+    }
+    
+    joinSound.currentTime = 0;
+    joinSound.volume = 0.5;
+    joinSound.play().catch(e => {
+        // Most likely a user interaction is required - that's okay
+        console.log('Could not play join sound:', e);
+    });
+}
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM content loaded, initializing app...');
+    
+    // Initialize sound elements
+    messageSound = document.getElementById('message-sound');
+    joinSound = document.getElementById('join-sound');
+    
+    if (messageSound) {
+        console.log('Message sound element found');
+    } else {
+        console.warn('Message sound element not found');
+    }
+    
+    if (joinSound) {
+        console.log('Join sound element found');
+    } else {
+        console.warn('Join sound element not found');
+    }
+    
+    // We'll unlock audio only when needed, not on every interaction
+    
     // Handle message form submission
     messageForm.addEventListener('submit', handleSendMessage);
     
@@ -109,9 +210,6 @@ function handleLogin(secretPhrase) { // e is removed, secretPhrase is now the di
     // Generate topic key (SHA-256 hash of the encryption key)
     // We use SHA-256 here just to get a consistent length topic identifier
     topicKey = CryptoJS.SHA256(encryptionKey).toString();
-    
-    // Display a shortened version of the topic for user reference
-    topicDisplay.textContent = topicKey.substring(0, 10) + '...';
     
     // Connect to WebSocket server
     connectWebSocket();
@@ -250,6 +348,7 @@ function handleSocketMessage(event) {
                     addOnlineUser(presenceData.clientId, presenceData.username);
                     if (presenceData.clientId !== clientId) {
                         addSystemMessage(`${presenceData.username} joined the chat`);
+                        playJoinSound(); // Play join notification sound
                     }
                 } else if (presenceData.action === 'leave') {
                     // Remove user from online users
@@ -333,6 +432,9 @@ function handleSocketMessage(event) {
             
             // Display the message content with username
             addMessage(messageBlock.content, false, null, messageBlock.username || 'Anonymous');
+            
+            // Play message notification sound (for non-historical messages)
+            playMessageSound();
             
             console.log('Verified and added message to chain:', currentHash);
         } catch (parseError) {
